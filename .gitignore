@@ -30,3 +30,8 @@ list_models.py
 # OS
 .DS_Store
 Thumbs.db
+
+# Submission Media
+cover_image.png
+streamlit_demo.gif
+streamlit_demo.webp
