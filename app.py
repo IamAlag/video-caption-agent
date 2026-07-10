@@ -660,10 +660,30 @@ def process_task(task: dict, tmp_base: str) -> dict:
 # --- Main --------------------------------------------------------------------
 
 def main() -> None:
-    os.makedirs(os.path.dirname(RESULTS_PATH), exist_ok=True)
+    # Ensure output directory exists
+    if RESULTS_PATH:
+        dir_name = os.path.dirname(RESULTS_PATH)
+        if dir_name:
+            os.makedirs(dir_name, exist_ok=True)
 
-    with open(TASKS_PATH, "r") as f:
-        tasks = json.load(f)
+    tasks = []
+    try:
+        if not os.path.exists(TASKS_PATH):
+            print(f"[warn] Tasks file not found at {TASKS_PATH}. Writing empty results file.")
+            with open(RESULTS_PATH, "w") as f:
+                json.dump([], f)
+            return
+
+        with open(TASKS_PATH, "r") as f:
+            tasks = json.load(f)
+    except Exception as e:
+        print(f"[error] Failed to load tasks from {TASKS_PATH}: {e}. Writing empty results file.")
+        try:
+            with open(RESULTS_PATH, "w") as f:
+                json.dump([], f)
+        except Exception as write_err:
+            print(f"[CRITICAL] Could not even write empty results fallback: {write_err}")
+        return
 
     print(f"Loaded {len(tasks)} tasks from {TASKS_PATH}")
     print(f"Model: {MODEL_ID}")
@@ -702,16 +722,27 @@ def main() -> None:
                         })
 
     # Sort by task_id for consistent ordering
-    results.sort(key=lambda r: r["task_id"])
+    results.sort(key=lambda r: r.get("task_id", ""))
 
-    with open(RESULTS_PATH, "w") as f:
-        json.dump(results, f, indent=2)
-
-    print(f"\n{'='*60}")
-    print(f"Done. Wrote {len(results)} results to {RESULTS_PATH}")
-    for r in results:
-        print(f"  {r['task_id']}: {list(r['captions'].keys())}")
-    print(f"{'='*60}")
+    try:
+        with open(RESULTS_PATH, "w") as f:
+            json.dump(results, f, indent=2)
+        print(f"\n{'='*60}")
+        print(f"Done. Wrote {len(results)} results to {RESULTS_PATH}")
+        for r in results:
+            print(f"  {r.get('task_id')}: {list(r.get('captions', {}).keys())}")
+        print(f"{'='*60}")
+    except Exception as e:
+        print(f"[CRITICAL] Failed to write results to {RESULTS_PATH}: {e}")
+        # Try local fallback
+        fallback_path = "./results.json"
+        try:
+            with open(fallback_path, "w") as f:
+                json.dump(results, f, indent=2)
+            print(f"[info] Successfully wrote fallback results to {fallback_path}")
+        except Exception as ex:
+            print(f"[CRITICAL] local fallback write failed as well: {ex}")
+        raise e
 
 
 if __name__ == "__main__":
