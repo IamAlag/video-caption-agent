@@ -613,10 +613,10 @@ def process_task(task: dict, tmp_base: str) -> dict:
             raise RuntimeError("No frames could be extracted from video")
         print(f"[{task_id}] Got {len(frames)} frames")
 
-        # Circuit breaker: if overall time elapsed > 480s, disable two-pass to guarantee no TIMEOUT
+        # Circuit breaker: if overall time elapsed > 360s, disable two-pass to guarantee no TIMEOUT
         use_two_pass = TWO_PASS
-        if time.time() - START_TIME > 480:
-            print(f"[{task_id}] [warn] Time elapsed > 480s, forcing fast single-pass mode")
+        if time.time() - START_TIME > 360:
+            print(f"[{task_id}] [warn] Time elapsed > 360s, forcing fast single-pass mode to prevent timeout")
             use_two_pass = False
 
         scene_description = ""
