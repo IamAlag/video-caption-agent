@@ -41,7 +41,7 @@ MODEL_ID = os.environ.get(
     "FIREWORKS_MODEL", "accounts/fireworks/models/kimi-k2p6"
 )
 
-NUM_FRAMES = int(os.environ.get("NUM_FRAMES", "5"))
+NUM_FRAMES = int(os.environ.get("NUM_FRAMES", "7"))
 MAX_FRAME_DIM = int(os.environ.get("MAX_FRAME_DIM", "768"))
 MAX_RETRIES = 3
 REQUEST_TIMEOUT = 30  # contest hard limit: 30s per request
@@ -347,15 +347,15 @@ def api_call(payload: dict, max_retries: int = MAX_RETRIES) -> dict | None:
 # --- Pass 1: Scene Understanding ---------------------------------------------
 
 SCENE_PROMPT = (
-    "You are a precise visual analyst. Examine these frames sampled from a short video clip.\n\n"
-    "Describe EXACTLY what you see in a factual, detailed paragraph. Include:\n"
-    "1. The main subject(s) and their appearance\n"
-    "2. What actions or movements are happening\n"
-    "3. The setting/environment/background\n"
-    "4. Any notable objects, colors, or visual elements\n\n"
-    "Be specific and objective. Only describe what is clearly visible. "
-    "Do NOT speculate about audio or events not shown.\n"
-    "Write 3-5 sentences."
+    "You are a precise visual analyst. Examine these frames from a short video clip.\n\n"
+    "Describe EXACTLY what you see. Be specific about:\n"
+    "1. Main subject(s) — species, breed, color, clothing, posture, expression\n"
+    "2. Actions — exact movement, speed, direction, interaction with objects\n"
+    "3. Setting — indoor/outdoor, time of day, weather, architecture, vegetation\n"
+    "4. Notable details — specific colors, textures, brands, numbers, spatial relationships\n\n"
+    "Write 3-5 dense, specific sentences. Use concrete nouns and active verbs. "
+    "Avoid vague words like 'something,' 'someone,' 'various,' 'scenes.' "
+    "Do NOT speculate about audio or unseen events."
 )
 
 
@@ -419,16 +419,16 @@ def build_style_prompt(styles: list, scene_description: str = "") -> str:
         "You are an expert video captioner with perfect tone control.\n\n"
         f"{scene_block}"
         "## Your Task\n"
-        "Based on what you see in the frames"
+        "Based on the visual frames"
         + (" and the scene description above" if scene_description else "")
         + ", write one caption per style.\n\n"
-        "## Rules\n"
-        "1. Each caption MUST accurately reflect what is happening in the video\n"
-        "2. Each caption MUST perfectly match its style voice -- formal NEVER funny, sarcastic NEVER sincere\n"
-        "3. Each caption should be 1-2 sentences\n"
-        "4. The four captions must feel like four completely different people wrote them\n"
-        "5. Do NOT describe sounds, audio, or unseen events\n"
-        "6. Ground every detail in what is visible: the actual visual subjects and environment from the frames MUST remain the central topic. Even for humorous styles, do NOT write about unrelated characters or scenarios as if they are in the video. If you make a comparison, use a direct simile (e.g., 'resembles', 'looks like') and keep the actual visual subject as the primary subject of the sentence.\n\n"
+        "## Critical Rules (Mandatory for Accuracy and Tone):\n"
+        "1. VISUAL GROUNDING: Every caption MUST describe ONLY what is visible in the frames. Do NOT speculate or add details that cannot be visually confirmed.\n"
+        "2. NO HALLUCINATIONS: Do NOT invent off-screen characters, names, backstories, or scenarios. If a person appears, describe them by appearance, NOT by invented roles or names.\n"
+        "3. COMPARISON RULE: For humorous styles, use explicit similes ('looks like', 'resembles') so comparisons are clearly figurative. The actual visual subject MUST remain the grammatical subject.\n"
+        "4. TONE SEPARATION: Each style voice must be unmistakable (formal=clinical/objective; sarcastic=dry/ironic; humorous_tech=dev-culture jokes; humorous_non_tech=warm everyday humor).\n"
+        "5. LENGTH: Each caption must be EXACTLY 1 sentence. No more. Brevity is part of the style.\n"
+        "6. ANTI-BLENDING: The four captions must be COMPLETELY DIFFERENT in voice, vocabulary, and sentence structure. If two captions could have been written by the same person, you have FAILED. formal=clinical encyclopedia entry, sarcastic=dry film critic at 2am, humorous_tech=frustrated dev doing stand-up, humorous_non_tech=warm comedian at a family dinner.\n\n"
         f"## Style Definitions\n{style_text}\n\n"
         "## Output Format\n"
         "Respond with ONLY a valid JSON object. No markdown fences, no commentary.\n"
@@ -452,8 +452,8 @@ def pass2_styled_captions(frame_paths: list, styles: list, scene_description: st
     payload = {
         "model": MODEL_ID,
         "messages": [{"role": "user", "content": content}],
-        "max_tokens": 1000,
-        "temperature": 0.55,
+        "max_tokens": 600,
+        "temperature": 0.30,
         "thinking": {"type": "disabled"},
         "response_format": {"type": "json_object"},
     }
@@ -496,7 +496,7 @@ def retry_single_style(frame_paths: list, style: str, scene_description: str = "
         "model": MODEL_ID,
         "messages": [{"role": "user", "content": content}],
         "max_tokens": 200,
-        "temperature": 0.7,
+        "temperature": 0.30,
         "thinking": {"type": "disabled"},
     }
 
