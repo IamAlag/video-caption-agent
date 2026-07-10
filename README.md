@@ -1,4 +1,4 @@
-# tetrlense ai — Four Voices, One Vision
+# Tetrlense ai — Four Voices, One Vision
 
 **Style-Conditioned Video Captioning Agent built for AMD Developer Hackathon: ACT II (Track 2)**
 
