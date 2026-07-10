@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+*.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test artifacts (keep test_input, ignore generated output)
+test_output/results.json
+
+# Debug files
+*.jpg
+*.mp4
+debug_*.py
+test_*.py
+list_models.py
+!test_input/
+
+# OS
+.DS_Store
+Thumbs.db
