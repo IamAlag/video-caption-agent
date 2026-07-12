@@ -50,18 +50,116 @@ TWO_PASS = os.environ.get("TWO_PASS", "1") == "1"  # set to 0 to disable
 
 # --- Style Definitions -------------------------------------------------------
 
-STYLE_VOICES = {
-    "formal": "Professional documentary narrator. Clinical, objective, third-person, present tense. Zero humor, zero personality, zero opinions.",
-    "sarcastic": "Jaded film critic. Dry British wit, ironic understatement, deadpan. Never wholesome, never mean, no tech jargon.",
-    "humorous_tech": "Software engineer doing stand-up. Everything is a bug, deployment, or race condition. Must use specific programming concepts.",
-    "humorous_non_tech": "Warm observational comedian. Family, food, pets, everyday life comparisons. Never technical, never sarcastic.",
+STYLE_PERSONAS = {
+    "formal": {
+        "voice": (
+            "You are a professional BBC World Service documentary narrator. "
+            "Write with absolute clinical objectivity."
+        ),
+        "do": [
+            "Use precise, neutral language",
+            "Describe only what is visually confirmed in the frames",
+            "Maintain third-person perspective throughout",
+            "Use present tense for ongoing actions",
+        ],
+        "dont": [
+            "NEVER use humor, irony, metaphors, or personality",
+            "NEVER express opinions or subjective judgments",
+            "NEVER use exclamation marks or casual language",
+            "NEVER speculate about what might be happening off-screen",
+        ],
+        "examples": [
+            "A golden retriever retrieves a tennis ball from a shallow stream while its owner watches from the bank.",
+            "Two autonomous delivery vehicles navigate a residential road bordered by mature oak trees.",
+            "A chameleon remains stationary on a branch, its skin displaying mottled green and brown patterns.",
+            "A runner sprints across the track under stadium lighting during a track and field competition.",
+            "A chef slices raw vegetables on a wooden cutting board in a professional restaurant kitchen.",
+        ],
+    },
+    "sarcastic": {
+        "voice": (
+            "You are a jaded film critic at a festival who has seen everything "
+            "and finds the mundane absurd. Use dry British wit and understatement."
+        ),
+        "do": [
+            "Use ironic understatement and deadpan observations",
+            "Point out the gap between effort and outcome",
+            "Be witty, never mean-spirited",
+            "Ground your sarcasm in what is actually visible",
+        ],
+        "dont": [
+            "NEVER be wholesome, sincere, or encouraging",
+            "NEVER use tech jargon or programming references",
+            "NEVER be cruel or personally attacking subjects",
+            "NEVER use obvious sarcasm markers like '/s' or 'NOT'",
+            "NEVER explain the joke or comment on the sarcasm itself",
+            "NEVER sound like a stand-up comedian -- this is dry, cynical film-criticism, not observational stand-up",
+        ],
+        "examples": [
+            "Oh look, another influencer pretending a brick wall is the Sistine Chapel. Truly groundbreaking composition.",
+            "Ah yes, nature's original hide-and-seek champion, blending in with all the effort of someone who just doesn't care.",
+            "Riveting footage of a person sitting at a desk. Someone call the Academy.",
+            "A chef tosses vegetables with the theatrical flair of someone who knows the camera is rolling. Culinary innovation, 2026.",
+            "A runner sprints for first place as if the finish line holds the meaning of life, only to receive a plastic ribbon.",
+        ],
+    },
+    "humorous_tech": {
+        "voice": (
+            "You are a veteran software engineer who sees the entire world as code. "
+            "Everything is a bug, a feature, or a deployment gone wrong."
+        ),
+        "do": [
+            "Use specific programming concepts: recursion, race conditions, null pointers, Git conflicts, CI/CD, stack overflow",
+            "The tech metaphor MUST connect to what is actually happening in the video",
+            "Make developers laugh with recognition humor",
+            "Use current tech culture references (stand-ups, code reviews, 'it works on my machine')",
+        ],
+        "dont": [
+            "NEVER use generic humor without a tech angle",
+            "NEVER use outdated or irrelevant tech references",
+            "NEVER be formal or dry -- you're the funny person at the stand-up",
+            "NEVER just name-drop tech words without a real joke",
+        ],
+        "examples": [
+            "This cat on a keyboard is basically every junior dev pushing to production on a Friday -- chaotic, unplanned, and someone will cry about it on Monday.",
+            "These self-driving cars are stuck in an infinite loop with no exit condition, also known as my last sprint.",
+            "This chameleon's camouflage algorithm has better backward compatibility than half the APIs I've integrated this year.",
+            "This kitchen prep setup is running multiple parallel threads, but the main chef process has blocked the stack with a massive memory leak.",
+            "The athlete's start-line response time has lower latency than a simple ping request to our database servers.",
+        ],
+    },
+    "humorous_non_tech": {
+        "voice": (
+            "You are a warm, observational stand-up comedian. Think about "
+            "everyday life, family situations, and universal human experiences."
+        ),
+        "do": [
+            "Use relatable everyday humor -- family, food, pets, commuting, aging",
+            "Compare what you see to universal human experiences",
+            "Be warm and inclusive -- something everyone would laugh at",
+            "Use vivid, specific comparisons (not vague 'funny' statements)",
+        ],
+        "dont": [
+            "NEVER use programming, technology, or internet culture references",
+            "NEVER be mean-spirited or exclusionary",
+            "NEVER use technical jargon of any kind",
+            "NEVER be dry or sarcastic -- you're genuinely amused and warm",
+        ],
+        "examples": [
+            "That dog fetching the ball looks exactly like me sprinting to the microwave when it beeps.",
+            "My grandmother trying to parallel park has more confidence than these little robot cars on a Sunday stroll.",
+            "This lizard sitting perfectly still is giving 'me pretending to be asleep when someone asks for help moving furniture' energy.",
+            "Watching this chef toss pancakes is like watching my father try to flip a mattress -- highly energetic and bound to end in disaster.",
+            "This sprinter running in the rain looks like my family running from the car to the house when we realize it's pouring.",
+        ],
+    },
 }
 
 FALLBACK_CAPTIONS = {
-    "formal": "The video depicts various subjects and activities in a structured environment.",
-    "sarcastic": "Another video of things happening in a place, truly riveting cinema.",
-    "humorous_tech": "This video has more unresolved frames than my bug tracker.",
-    "humorous_non_tech": "Watching this is like waiting for your food at a restaurant.",
+    "formal": "The video depicts a sequence of scenes involving various subjects and activities in a structured environment.",
+    "sarcastic": "Oh wonderful, another video of things happening in a place. Truly the content the world was crying out for.",
+    "humorous_tech": "This video has more frames than my browser tabs after a Stack Overflow rabbit hole, and about as much resolution on the actual problem.",
+    "humorous_non_tech": "Watching this is like waiting for your food at a restaurant -- you know something is coming, you are just not sure what or when.",
 }
 
 
@@ -249,11 +347,16 @@ def api_call(payload: dict, max_retries: int = MAX_RETRIES) -> dict | None:
 # --- Pass 1: Scene Understanding ---------------------------------------------
 
 SCENE_PROMPT = (
-    "Describe exactly what is visible in these video frames in 2-4 specific sentences.\n\n"
-    "Include: main subject (appearance, color, species/type), actions, setting, notable objects.\n"
-    "Use concrete nouns and active verbs. No vague words.\n"
-    "Do NOT guess text on signs, buildings, or screens unless clearly legible.\n"
-    "Do NOT speculate about audio, off-screen events, or identities."
+    "You are a precise visual analyst. Examine these frames from a short video clip.\n\n"
+    "Describe EXACTLY what you see. Be specific about:\n"
+    "1. Main subject(s) — species, breed, color, clothing, posture, expression\n"
+    "2. Actions — exact movement, speed, direction, interaction with objects\n"
+    "3. Setting — indoor/outdoor, time of day, weather, architecture, vegetation\n"
+    "4. Notable details — specific colors, textures, brands, numbers, spatial relationships\n\n"
+    "Write 3-5 dense, specific sentences. Use concrete nouns and active verbs. "
+    "Avoid vague words like 'something,' 'someone,' 'various,' 'scenes.' "
+    "Do NOT guess or transcribe text on signs, buildings, or screens unless it is clearly and sharply legible. "
+    "Do NOT speculate about audio or unseen events."
 )
 
 
@@ -272,8 +375,8 @@ def pass1_scene_understanding(frame_paths: list) -> str:
     payload = {
         "model": MODEL_ID,
         "messages": [{"role": "user", "content": content}],
-        "max_tokens": 300,
-        "temperature": 0.2,
+        "max_tokens": 400,
+        "temperature": 0.3,
         "thinking": {"type": "disabled"},
     }
 
@@ -286,24 +389,52 @@ def pass1_scene_understanding(frame_paths: list) -> str:
 # --- Pass 2: Styled Captioning -----------------------------------------------
 
 def build_style_prompt(styles: list, scene_description: str = "") -> str:
-    """Build a compact style prompt (~500 tokens instead of ~2000)."""
-    style_lines = "\n".join(f"- {s}: {STYLE_VOICES[s]}" for s in styles)
-    keys_example = ", ".join(f'"{s}": "caption"' for s in styles)
+    """Build a detailed style prompt, optionally grounded in a scene description."""
+    style_blocks = []
+    for s in styles:
+        persona = STYLE_PERSONAS.get(s, {})
+        voice = persona.get("voice", "")
+        dos = "\n".join(f"    + {d}" for d in persona.get("do", []))
+        donts = "\n".join(f"    - {d}" for d in persona.get("dont", []))
+        examples = "\n".join(f'    e.g. "{ex}"' for ex in persona.get("examples", []))
+
+        style_blocks.append(
+            f'### Style: "{s}"\n'
+            f"  Voice: {voice}\n"
+            f"  DO:\n{dos}\n"
+            f"  DON'T:\n{donts}\n"
+            f"  Examples (for reference, do NOT copy):\n{examples}"
+        )
+
+    style_text = "\n\n".join(style_blocks)
+    keys_example = ", ".join(f'"{s}": "Your caption here"' for s in styles)
 
     scene_block = ""
     if scene_description:
-        scene_block = f"Scene: {scene_description}\n\n"
+        scene_block = (
+            f"## Scene Description (verified facts about this video)\n"
+            f"{scene_description}\n\n"
+        )
 
     return (
+        "You are an expert video captioner with perfect tone control.\n\n"
         f"{scene_block}"
-        "Write one short caption per style for this video.\n\n"
-        f"Styles:\n{style_lines}\n\n"
-        "Rules:\n"
-        "- Maximum 25 words per caption. Shorter is better.\n"
-        "- Describe ONLY what is visible. No guessed text on signs/screens. No invented characters, names, or backstories.\n"
-        "- Each caption must sound like a COMPLETELY different person wrote it.\n"
-        "- For humor styles, use similes ('looks like', 'resembles') to keep comparisons clearly figurative.\n\n"
-        f"Respond with ONLY valid JSON: {{{keys_example}}}"
+        "## Your Task\n"
+        "Based on the visual frames"
+        + (" and the scene description above" if scene_description else "")
+        + ", write one caption per style.\n\n"
+        "## Critical Rules (Mandatory for Accuracy and Tone):\n"
+        "1. VISUAL GROUNDING: Every caption MUST describe ONLY what is visible in the frames. Do NOT speculate or add details that cannot be visually confirmed.\n"
+        "2. NO HALLUCINATIONS: Do NOT invent off-screen characters, names, backstories, or scenarios. If a person appears, describe them by appearance, NOT by invented roles or names.\n"
+        "3. COMPARISON RULE: For humorous styles, use explicit similes ('looks like', 'resembles') so comparisons are clearly figurative. The actual visual subject MUST remain the grammatical subject.\n"
+        "4. TONE SEPARATION: Each style voice must be unmistakable (formal=clinical/objective; sarcastic=dry/ironic; humorous_tech=dev-culture jokes; humorous_non_tech=warm everyday humor).\n"
+        "5. LENGTH: Each caption must be EXACTLY 1 sentence. No more. Brevity is part of the style.\n"
+        "6. DETAILED AND VIVID: Keep captions highly descriptive and detailed (e.g. mention colors, clothes, specific species/objects shown in the Scene Description) rather than using generic words like 'person', 'car', or 'animal'.\n"
+        "7. ANTI-BLENDING: The four captions must be COMPLETELY DIFFERENT in voice, vocabulary, and sentence structure. If two captions could have been written by the same person, you have FAILED. formal=clinical encyclopedia entry, sarcastic=dry film critic at 2am, humorous_tech=frustrated dev doing stand-up, humorous_non_tech=warm comedian at a family dinner.\n\n"
+        f"## Style Definitions\n{style_text}\n\n"
+        "## Output Format\n"
+        "Respond with ONLY a valid JSON object. No markdown fences, no commentary.\n"
+        f"Exact shape: {{{keys_example}}}"
     )
 
 
@@ -323,8 +454,8 @@ def pass2_styled_captions(frame_paths: list, styles: list, scene_description: st
     payload = {
         "model": MODEL_ID,
         "messages": [{"role": "user", "content": content}],
-        "max_tokens": 400,
-        "temperature": 0.50,
+        "max_tokens": 600,
+        "temperature": 0.30,
         "thinking": {"type": "disabled"},
         "response_format": {"type": "json_object"},
     }
@@ -340,14 +471,20 @@ def pass2_styled_captions(frame_paths: list, styles: list, scene_description: st
 
 def retry_single_style(frame_paths: list, style: str, scene_description: str = "") -> str:
     """Retry a single failed style with a focused prompt."""
-    voice = STYLE_VOICES.get(style, "")
-    scene_block = f"Scene: {scene_description}\n" if scene_description else ""
+    persona = STYLE_PERSONAS.get(style, {})
+    voice = persona.get("voice", "")
+    dos = "; ".join(persona.get("do", []))
+    examples = " | ".join(f'"{ex}"' for ex in persona.get("examples", [])[:2])
+
+    scene_block = f"\nScene: {scene_description}\n" if scene_description else ""
 
     prompt = (
-        f"Write ONE caption (max 25 words) in the '{style}' style for this video.\n"
-        f"{scene_block}"
+        f"Write exactly ONE caption in the '{style}' style for this video.\n"
+        f"{scene_block}\n"
         f"Voice: {voice}\n"
-        "Only describe what is visible. Respond with ONLY the caption text."
+        f"DO: {dos}\n"
+        f"Examples: {examples}\n\n"
+        "Write 1-2 sentences. Respond with ONLY the caption text, nothing else."
     )
 
     content = [{"type": "text", "text": prompt}]
@@ -360,8 +497,8 @@ def retry_single_style(frame_paths: list, style: str, scene_description: str = "
     payload = {
         "model": MODEL_ID,
         "messages": [{"role": "user", "content": content}],
-        "max_tokens": 100,
-        "temperature": 0.50,
+        "max_tokens": 200,
+        "temperature": 0.30,
         "thinking": {"type": "disabled"},
     }
 
@@ -445,7 +582,7 @@ def process_task(task: dict, tmp_base: str) -> dict:
     """Process a single video captioning task."""
     task_id = task.get("task_id", f"task_{int(time.time() * 1000) % 100000}")
     video_url = task.get("video_url", "")
-    styles = task.get("styles", list(STYLE_VOICES.keys()))
+    styles = task.get("styles", list(STYLE_PERSONAS.keys()))
 
     # Per-task temp directory to avoid frame collisions in parallel mode
     tmp_dir = os.path.join(tmp_base, task_id)
@@ -462,12 +599,9 @@ def process_task(task: dict, tmp_base: str) -> dict:
         print(f"[{task_id}] Downloading video...")
         download_video(video_url, video_path)
 
-        # Get duration and calculate adaptive frame count (1 frame per 15s, capped at 5 to 8 frames)
+        # Use configured frame count (default: 7)
         duration = get_duration(video_path)
-        if "NUM_FRAMES" in os.environ:
-            num_frames = int(os.environ["NUM_FRAMES"])
-        else:
-            num_frames = min(8, max(5, int(duration / 15)))
+        num_frames = NUM_FRAMES
 
         # Extract frames (scene detection with uniform fallback)
         print(f"[{task_id}] Extracting {num_frames} frames (duration: {duration:.1f}s)...")
@@ -577,7 +711,7 @@ def main() -> None:
                     except Exception as e:
                         task_id = task.get("task_id", "unknown_task")
                         print(f"[error] Task {task_id} exception: {e}")
-                        styles = task.get("styles", list(STYLE_VOICES.keys()))
+                        styles = task.get("styles", list(STYLE_PERSONAS.keys()))
                         results.append({
                             "task_id": task_id,
                             "captions": {
