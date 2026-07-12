@@ -36,9 +36,12 @@ FIREWORKS_API_KEY = os.environ.get("FIREWORKS_API_KEY", "")
 FIREWORKS_BASE_URL = os.environ.get(
     "FIREWORKS_BASE_URL", "https://api.fireworks.ai/inference/v1"
 )
-# Kimi K2 -- fast vision model with thinking disabled (~7s per clip)
-MODEL_ID = os.environ.get(
-    "FIREWORKS_MODEL", "accounts/fireworks/models/kimi-k2p6"
+# Model configuration: Kimi K2 for vision, DeepSeek V4 Pro for text/styling
+VISION_MODEL_ID = os.environ.get(
+    "FIREWORKS_VISION_MODEL", "accounts/fireworks/models/kimi-k2p6"
+)
+TEXT_MODEL_ID = os.environ.get(
+    "FIREWORKS_TEXT_MODEL", "accounts/fireworks/models/deepseek-v4-pro"
 )
 
 NUM_FRAMES = int(os.environ.get("NUM_FRAMES", "7"))
@@ -373,7 +376,7 @@ def pass1_scene_understanding(frame_paths: list) -> str:
         })
 
     payload = {
-        "model": MODEL_ID,
+        "model": VISION_MODEL_ID,
         "messages": [{"role": "user", "content": content}],
         "max_tokens": 400,
         "temperature": 0.3,
@@ -440,25 +443,38 @@ def build_style_prompt(styles: list, scene_description: str = "") -> str:
 
 def pass2_styled_captions(frame_paths: list, styles: list, scene_description: str = "") -> dict:
     """
-    Pass 2: Generate styled captions, optionally grounded in scene description.
+    Pass 2: Generate styled captions.
+    Uses DeepSeek V4 Pro (text-only) if scene description is available;
+    falls back to Kimi K2 (vision) if running single-pass.
     """
     prompt = build_style_prompt(styles, scene_description)
 
-    content = [{"type": "text", "text": prompt}]
-    for fp in frame_paths:
-        content.append({
-            "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{encode_image_b64(fp)}"},
-        })
-
-    payload = {
-        "model": MODEL_ID,
-        "messages": [{"role": "user", "content": content}],
-        "max_tokens": 600,
-        "temperature": 0.30,
-        "thinking": {"type": "disabled"},
-        "response_format": {"type": "json_object"},
-    }
+    if scene_description:
+        # Use fast, powerful text-only model
+        payload = {
+            "model": TEXT_MODEL_ID,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 600,
+            "temperature": 0.40,
+            "thinking": {"type": "disabled"},
+            "response_format": {"type": "json_object"},
+        }
+    else:
+        # Fallback to vision model if scene description is missing
+        content = [{"type": "text", "text": prompt}]
+        for fp in frame_paths:
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{encode_image_b64(fp)}"},
+            })
+        payload = {
+            "model": VISION_MODEL_ID,
+            "messages": [{"role": "user", "content": content}],
+            "max_tokens": 600,
+            "temperature": 0.30,
+            "thinking": {"type": "disabled"},
+            "response_format": {"type": "json_object"},
+        }
 
     result = api_call(payload)
     if result and "choices" in result:
@@ -487,20 +503,28 @@ def retry_single_style(frame_paths: list, style: str, scene_description: str = "
         "Write 1-2 sentences. Respond with ONLY the caption text, nothing else."
     )
 
-    content = [{"type": "text", "text": prompt}]
-    for fp in frame_paths[:3]:  # fewer frames for retry
-        content.append({
-            "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{encode_image_b64(fp)}"},
-        })
-
-    payload = {
-        "model": MODEL_ID,
-        "messages": [{"role": "user", "content": content}],
-        "max_tokens": 200,
-        "temperature": 0.30,
-        "thinking": {"type": "disabled"},
-    }
+    if scene_description:
+        payload = {
+            "model": TEXT_MODEL_ID,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 200,
+            "temperature": 0.40,
+            "thinking": {"type": "disabled"},
+        }
+    else:
+        content = [{"type": "text", "text": prompt}]
+        for fp in frame_paths[:3]:
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{encode_image_b64(fp)}"},
+            })
+        payload = {
+            "model": VISION_MODEL_ID,
+            "messages": [{"role": "user", "content": content}],
+            "max_tokens": 200,
+            "temperature": 0.30,
+            "thinking": {"type": "disabled"},
+        }
 
     result = api_call(payload, max_retries=2)
     if result and "choices" in result:
@@ -685,7 +709,7 @@ def main() -> None:
         return
 
     print(f"Loaded {len(tasks)} tasks from {TASKS_PATH}")
-    print(f"Model: {MODEL_ID}")
+    print(f"Vision model: {VISION_MODEL_ID}, Text model: {TEXT_MODEL_ID}")
     print(f"Frames: {NUM_FRAMES}, Two-pass: {TWO_PASS}")
 
     results = []
