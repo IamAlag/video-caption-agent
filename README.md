@@ -5,7 +5,12 @@ A **style-conditioned video captioning prototype** built for the AMD Developer H
 - **Developer:** Alagappan
 - **Team:** VectorForge AI
 - **Core workflow:** scene understanding → style-conditioned caption generation
-- **Model provider:** Fireworks AI (Kimi vision model; configurable via environment variables)
+- **Model provider:** Fireworks AI (model IDs are configurable)
+
+## New here? Start with the learning guides
+
+- **[Beginner guide: understand and run the project](docs/START_HERE.md)** — setup, plain-English vocabulary, code map, troubleshooting, and a learning plan.
+- **[Interview notes](docs/INTERVIEW_NOTES.md)** — concise project explanation, design trade-offs, and practice questions.
 
 ## The problem
 
@@ -15,13 +20,13 @@ A caption can sound polished while describing something that never happened in t
 
 ```mermaid
 flowchart TD
-    A[Task list / video URLs] --> B[Download or load clips]
+    A[Task list and video URLs] --> B[Download video]
     B --> C[Extract representative frames]
-    C --> D[Pass 1: factual scene description]
-    D --> E[Pass 2: captions in requested styles]
+    C --> D[Pass 1: describe visible scene]
+    D --> E[Pass 2: write requested styles]
     E --> F[Parse and validate JSON]
     F --> G{All styles valid?}
-    G -- No --> H[Retry only failed styles]
+    G -- No --> H[Retry failed styles]
     H --> F
     G -- Yes --> I[Write results.json]
 ```
@@ -29,9 +34,9 @@ flowchart TD
 ### Key engineering decisions
 
 - **Two-pass generation:** first create a factual grounding description, then use it as context for styled captions. This is intended to reduce unsupported details; it does not eliminate hallucinations.
-- **Scene-aware frame extraction:** FFmpeg scene detection is attempted first, with uniform sampling as a fallback when the number of selected frames is unsuitable.
+- **Scene-aware frame extraction:** FFmpeg scene detection is attempted first, with uniform sampling as a fallback when the selected frames are unsuitable.
 - **Targeted retries:** retry an individual style if its output cannot be parsed, instead of rerunning every style.
-- **Concurrent processing:** a thread pool processes multiple clips concurrently (configured for three workers).
+- **Concurrent processing:** a bounded thread pool processes multiple clips concurrently.
 - **Defensive output parsing:** handles common formatting problems such as Markdown fences and surrounding text, with fallback parsing for imperfect model output.
 
 ## Tech stack
@@ -42,17 +47,21 @@ Python · FFmpeg · Fireworks AI API · Docker · Streamlit
 
 ### Requirements
 
-- Python
-- FFmpeg
+- Python 3.11 (the version used by CI)
+- FFmpeg installed and available on your PATH
 - A Fireworks AI API key
 
 Install dependencies:
 
 ```bash
-pip install -r requirements.txt
+python -m venv .venv
+# macOS/Linux
+source .venv/bin/activate
+# Windows PowerShell: .venv\\Scripts\\Activate.ps1
+python -m pip install -r requirements.txt
 ```
 
-Set the API key and input/output paths:
+Set the API key and input/output paths, then run:
 
 ```bash
 export FIREWORKS_API_KEY=your_key_here
@@ -61,15 +70,16 @@ export RESULTS_PATH=./test_output/results.json
 python app.py
 ```
 
-Inspect the generated `results.json` and verify that each task has the expected styles. The exact input schema is defined by the sample task file in the repository.
+On Windows PowerShell, use `$env:FIREWORKS_API_KEY="your_key_here"` and equivalent `$env:TASKS_PATH` / `$env:RESULTS_PATH` assignments instead of `export`.
+
+Inspect the generated `results.json` and verify that each task has the expected styles. Make sure the output directory exists if required by your local run.
 
 ### Run the interactive dashboard
 
 ```bash
-pip install -r requirements_demo.txt
-export FIREWORKS_API_KEY=your_key_here
+python -m pip install -r requirements_demo.txt
 streamlit run demo_app.py
-```
+``
 
 ### Run with Docker
 
@@ -91,33 +101,41 @@ docker run --rm \
 
 ## Configuration
 
-| Variable | Required | Default | Purpose |
-|---|---|---|---|
-| `FIREWORKS_API_KEY` | Yes | — | Provider authentication |
-| `FIREWORKS_BASE_URL` | No | `https://api.fireworks.ai/inference/v1` | API endpoint |
-| `FIREWORKS_MODEL` | No | `accounts/fireworks/models/kimi-k2p6` | Model identifier |
-| `TASKS_PATH` | No | `/input/tasks.json` | Input task file |
-| `RESULTS_PATH` | No | `/output/results.json` | Output JSON file |
-| `NUM_FRAMES` | No | `5` | Frame sampling target |
-| `MAX_FRAME_DIM` | No | `768` | Maximum frame dimension |
-| `TWO_PASS` | No | `1` | Set to `0` to disable the two-pass flow |
+| Variable | Purpose |
+|---|---|
+| `FIREWORKS_API_KEY` | Required provider authentication |
+| `FIREWORKS_BASE_URL` | API endpoint override |
+| `FIREWORKS_VISION_MODEL` | Vision model ID override |
+| `FIREWORKS_TEXT_MODEL` | Text/style model ID override |
+| `TASKS_PATH` | Input task file |
+| `RESULTS_PATH` | Output JSON file |
+| `NUM_FRAMES` | Target number of frames sampled |
+| `MAX_FRAME_DIM` | Maximum frame dimension |
+| `TWO_PASS` | Set to `0` to disable the two-pass flow |
+
+The code is the source of truth for defaults; model identifiers and defaults may evolve.
 
 ## Limitations and next steps
 
 - Caption quality depends on the selected model and sampled frames; events between sampled frames can be missed.
 - A grounding description can itself be wrong, and the second pass can introduce details not present in the video.
+- The evaluation script uses an LLM judge, which can be inconsistent; its scores are not objective ground truth.
 - Provider latency, rate limits, and API costs affect throughput.
-- The most useful next improvements are a repeatable evaluation set, tests for malformed model responses, measurements for latency/cost, and clearer failure reporting for failed downloads or clips.
+- Useful next improvements include a repeatable human-reviewed evaluation set, tests for malformed model responses, measurements for latency/cost, and clearer failure reporting for failed downloads or clips.
 
 ## Project structure
 
 ```text
 app.py                 # Main captioning pipeline
 demo_app.py            # Interactive Streamlit demo
-evaluate.py             # Evaluation / judge simulation
-requirements.txt        # Runtime dependencies
+evaluate.py             # LLM-as-judge evaluation
+requirements.txt        # Batch dependencies
+requirements_demo.txt   # Demo UI dependencies
 Dockerfile              # Container image
-test_input/             # Sample task input
+test_input/TASKS.json   # Example input tasks
+docs/START_HERE.md      # Beginner-friendly learning guide
+docs/INTERVIEW_NOTES.md # Interview preparation
+.github/workflows/      # Automated checks
 ```
 
 ## About
