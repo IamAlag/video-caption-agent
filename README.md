@@ -1,65 +1,69 @@
-# Tetrlense ai — Four Voices, One Vision
+# Tetrlense AI — Four Voices, One Vision
 
-**Style-Conditioned Video Captioning Agent built for AMD Developer Hackathon: ACT II (Track 2)**
+A **style-conditioned video captioning prototype** built for the AMD Developer Hackathon: ACT II (Track 2). It uses a two-pass vision-language workflow to generate captions in multiple styles while keeping factual scene understanding separate from creative wording.
 
-*   **Developer:** Alagappan
-*   **Team:** VectorForge AI
-*   **Core Architecture:** Two-Pass Factual Grounding (Scene Understanding → Styled Captioning) using Moonshot's Kimi K2 vision model via Fireworks AI.
+- **Developer:** Alagappan
+- **Team:** VectorForge AI
+- **Core workflow:** scene understanding → style-conditioned caption generation
+- **Model provider:** Fireworks AI (Kimi vision model; configurable via environment variables)
 
----
+## The problem
 
-## How It Works
+A caption can sound polished while describing something that never happened in the video. This project experiments with separating the factual description of a clip from the later task of writing in a particular voice.
 
+## How it works
+
+```mermaid
+flowchart TD
+    A[Task list / video URLs] --> B[Download or load clips]
+    B --> C[Extract representative frames]
+    C --> D[Pass 1: factual scene description]
+    D --> E[Pass 2: captions in requested styles]
+    E --> F[Parse and validate JSON]
+    F --> G{All styles valid?}
+    G -- No --> H[Retry only failed styles]
+    H --> F
+    G -- Yes --> I[Write results.json]
 ```
-tasks.json --> Download Video --> Extract Frames --> Pass 1: Scene Understanding --> Pass 2: Styled Captioning --> results.json
-```
 
-### Two-Pass Architecture
+### Key engineering decisions
 
-1. **Pass 1 — Scene Understanding**: Sends sampled frames to Kimi K2 and gets a factual, objective description of what's happening in the video. This creates a "grounding document" that prevents hallucination.
+- **Two-pass generation:** first create a factual grounding description, then use it as context for styled captions. This is intended to reduce unsupported details; it does not eliminate hallucinations.
+- **Scene-aware frame extraction:** FFmpeg scene detection is attempted first, with uniform sampling as a fallback when the number of selected frames is unsuitable.
+- **Targeted retries:** retry an individual style if its output cannot be parsed, instead of rerunning every style.
+- **Concurrent processing:** a thread pool processes multiple clips concurrently (configured for three workers).
+- **Defensive output parsing:** handles common formatting problems such as Markdown fences and surrounding text, with fallback parsing for imperfect model output.
 
-2. **Pass 2 — Styled Captioning**: Using the scene description as context plus the original frames, generates all four styled captions in a single call. Each style has a deeply characterized persona with explicit DO/DON'T constraints and reference examples.
+## Tech stack
 
-This separation ensures **accuracy first, tone second** — exactly what the LLM-Judge evaluates.
+Python · FFmpeg · Fireworks AI API · Docker · Streamlit
 
-### Key Design Decisions
+## Quick start
 
-- **Kimi K2 with thinking disabled**: Kimi K2 is a reasoning model. By default it generates large amounts of internal "thinking" text before its answer. Passing `"thinking": {"type": "disabled"}` skips this step, dropping per-clip latency from ~37s to ~7s — well under the 30-second-per-request contest limit.
+### Requirements
 
-- **Scene-change frame extraction**: Instead of sampling frames at fixed intervals, the agent first tries ffmpeg's scene detection filter (`select='gt(scene,0.25)'`) to grab frames at actual visual transitions. Falls back to uniform sampling if scene detection yields too few or too many frames.
-
-- **Per-style retry**: If any style fails to parse from the JSON response, the agent retries just that style individually with a focused single-style prompt, rather than re-running the entire batch.
-
-- **Parallel video processing**: Videos are processed concurrently using a thread pool (3 workers), significantly reducing total pipeline time for larger batches.
-
-- **Robust JSON parsing**: Handles markdown fences, stray text, partial JSON, and falls back to regex key-value extraction as a last resort.
-
-## Prerequisites
-
-- Docker with buildx (for cross-platform builds)
+- Python
+- FFmpeg
 - A Fireworks AI API key
 
-## Quick Start
-
-### 1. Test locally (without Docker)
+Install dependencies:
 
 ```bash
 pip install -r requirements.txt
-# ffmpeg must be installed:
-#   Windows: winget install ffmpeg
-#   macOS:  brew install ffmpeg
-#   Ubuntu: sudo apt-get install ffmpeg
+```
 
+Set the API key and input/output paths:
+
+```bash
 export FIREWORKS_API_KEY=your_key_here
 export TASKS_PATH=./test_input/TASKS.json
 export RESULTS_PATH=./test_output/results.json
 python app.py
-cat test_output/results.json
 ```
 
-### 2. Run the Streamlit Interactive Dashboard (for presenting/testing)
+Inspect the generated `results.json` and verify that each task has the expected styles. The exact input schema is defined by the sample task file in the repository.
 
-We built an interactive, dark-themed Streamlit dashboard (`demo_app.py`) so you can run the pipeline live on any video and inspect frame extraction, logs, and caption cards side-by-side:
+### Run the interactive dashboard
 
 ```bash
 pip install -r requirements_demo.txt
@@ -67,122 +71,55 @@ export FIREWORKS_API_KEY=your_key_here
 streamlit run demo_app.py
 ```
 
-### 3. Build the Docker image (linux/amd64)
+### Run with Docker
+
+Build:
 
 ```bash
 docker buildx build --platform linux/amd64 -t video-captioning-agent:latest --load .
 ```
 
-### 3. Run the container
+Run (mount local input and output directories):
 
 ```bash
 docker run --rm \
-  -e FIREWORKS_API_KEY=your_key_here \
+  -e FIREWORKS_API_KEY \
   -v "$(pwd)/test_input:/input" \
   -v "$(pwd)/test_output:/output" \
   video-captioning-agent:latest
 ```
 
-### 4. Verify output
+## Configuration
 
-```bash
-cat test_output/results.json
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `FIREWORKS_API_KEY` | Yes | — | Provider authentication |
+| `FIREWORKS_BASE_URL` | No | `https://api.fireworks.ai/inference/v1` | API endpoint |
+| `FIREWORKS_MODEL` | No | `accounts/fireworks/models/kimi-k2p6` | Model identifier |
+| `TASKS_PATH` | No | `/input/tasks.json` | Input task file |
+| `RESULTS_PATH` | No | `/output/results.json` | Output JSON file |
+| `NUM_FRAMES` | No | `5` | Frame sampling target |
+| `MAX_FRAME_DIM` | No | `768` | Maximum frame dimension |
+| `TWO_PASS` | No | `1` | Set to `0` to disable the two-pass flow |
+
+## Limitations and next steps
+
+- Caption quality depends on the selected model and sampled frames; events between sampled frames can be missed.
+- A grounding description can itself be wrong, and the second pass can introduce details not present in the video.
+- Provider latency, rate limits, and API costs affect throughput.
+- The most useful next improvements are a repeatable evaluation set, tests for malformed model responses, measurements for latency/cost, and clearer failure reporting for failed downloads or clips.
+
+## Project structure
+
+```text
+app.py                 # Main captioning pipeline
+demo_app.py            # Interactive Streamlit demo
+evaluate.py             # Evaluation / judge simulation
+requirements.txt        # Runtime dependencies
+Dockerfile              # Container image
+test_input/             # Sample task input
 ```
 
-Check that:
-- Exit code is 0
-- `results.json` is valid JSON
-- Every task has a caption for every requested style
-- Finishes well under the 10-minute runtime limit
+## About
 
-## Push to Public Registry
-
-```bash
-docker tag video-captioning-agent:latest ghcr.io/<your-username>/video-captioning-agent:latest
-docker buildx build --platform linux/amd64 -t ghcr.io/<your-username>/video-captioning-agent:latest --push .
-```
-
-Make sure the image is **public** before submitting.
-
-## Environment Variables
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `FIREWORKS_API_KEY` | Yes | — | Your Fireworks AI API key |
-| `FIREWORKS_BASE_URL` | No | `https://api.fireworks.ai/inference/v1` | Fireworks API endpoint |
-| `FIREWORKS_MODEL` | No | `accounts/fireworks/models/kimi-k2p6` | Vision model to use |
-| `TASKS_PATH` | No | `/input/tasks.json` | Path to input tasks file |
-| `RESULTS_PATH` | No | `/output/results.json` | Path to output results file |
-| `NUM_FRAMES` | No | `5` | Frames sampled per video clip |
-| `MAX_FRAME_DIM` | No | `768` | Max pixel dimension for frame resizing |
-| `TWO_PASS` | No | `1` | Set to `0` to disable two-pass architecture |
-
-## Project Structure
-
-```
-.
-├── app.py              # Main captioning agent
-├── evaluate.py         # Self-evaluation script (LLM-judge simulator)
-├── requirements.txt    # Python dependencies
-├── dockerfile          # Container definition
-├── test_input/
-│   └── TASKS.json      # Example test tasks
-└── test_output/
-    └── results.json    # Generated captions
-```
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Video Captioning Agent                      │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  tasks.json ──> Download ──> Frame Extraction                   │
-│                              (scene-change or uniform)          │
-│                                    │                            │
-│                                    v                            │
-│                          ┌─────────────────┐                    │
-│                          │  Pass 1: Scene   │                   │
-│                          │  Understanding   │                   │
-│                          │  (Kimi K2, t=0.3)│                   │
-│                          └────────┬────────┘                    │
-│                                   │ factual description         │
-│                                   v                             │
-│                          ┌─────────────────┐                    │
-│                          │  Pass 2: Styled  │                   │
-│                          │  Captioning      │                   │
-│                          │  (Kimi K2, t=0.7)│                   │
-│                          └────────┬────────┘                    │
-│                                   │ 4 styled captions           │
-│                                   v                             │
-│                 ┌─────────────────────────────────┐             │
-│                 │  Validate + Per-Style Retry      │             │
-│                 └────────────────┬────────────────┘             │
-│                                  │                              │
-│                                  v                              │
-│                           results.json                          │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-## Scoring Notes
-
-Track 2 is scored via **LLM-Judge on two axes**:
-- **Accuracy**: How well the caption reflects what actually happens in the video
-- **Tone adherence**: How well each caption matches its requested style
-
-The two-pass architecture is specifically designed to maximize both:
-- Pass 1 ensures factual grounding (accuracy)
-- Pass 2's detailed personas with DO/DON'T constraints ensure style separation (tone)
-
-## Tech Stack
-
-- **Model**: Kimi K2 (`kimi-k2p6`) via Fireworks AI API
-- **Video Processing**: FFmpeg (frame extraction, scene detection, resizing)
-- **Runtime**: Python 3.11, Docker (linux/amd64)
-- **Cloud**: AMD Developer Cloud + Fireworks AI API credits
-
-## License
-
-MIT
+Built by Alagappan as a hackathon project exploring multimodal AI pipelines, structured model outputs, retries, and containerized execution. This is a prototype, not a claim of production-grade video understanding.
